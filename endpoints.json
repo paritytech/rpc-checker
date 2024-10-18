@@ -1,7 +1,14 @@
 {
-    "endpoints": {
-        "Allnodes": "wss://kusama-rpc.publicnode.com",
-        "Dwellir": "wss://kusama-rpc.dwellir.com",
-        "Dwellir Tunisia": "wss://kusama-rpc-tn.dwellir.com"
+  "endpoints": {
+    "foo": {
+      "Allnodes": "wss://kusama-rpc.publicnode.com",
+      "Dwellir": "wss://kusama-rpc.dwellir.com",
+      "Dwellir Tunisia": "wss://kusama-rpc-tn.dwellir.com"
+    },
+    "bar": {
+      "Allnodes": "wss://kusama-rpc.publicnode.com",
+      "Dwellir": "wss://kusama-rpc.dwellir.com",
+      "Dwellir Tunisia": "wss://kusama-rpc-tn.dwellir.com"
     }
+  }
 }

@@ -28,6 +28,12 @@
 </head>
 <body>
     <h1>Global Latencies</h1>
+    <div style="text-align: center;">
+        <label for="endpointSelect">Select Endpoint Group:</label>
+        <select id="endpointSelect">
+            <!-- Options will be populated dynamically -->
+        </select>
+    </div>
     <div class="chart-container">
         <div class="bar-chart">
             <canvas id="barChart" width="800" height="300"></canvas>
@@ -40,6 +46,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         let endpoints = {}; // Declare endpoints object
+        let selectedEndpoints = {}; // Store currently selected endpoints
         let latencyData = {}; // Store latency data
         let barChart, lineChart; // Declare chart variables
 
@@ -77,7 +84,7 @@
 
         // Function to measure and update charts
         function measureAndUpdate() {
-            Object.entries(endpoints).forEach(([name, url]) => {
+            Object.entries(selectedEndpoints).forEach(([name, url]) => {
                 measureLatency(name, url);
             });
             updateCharts();
@@ -89,82 +96,117 @@
             .then(data => {
                 endpoints = data.endpoints;
 
-                // Initialize latency data for each endpoint
-                Object.keys(endpoints).forEach(endpoint => {
-                    latencyData[endpoint] = [];
+                // Populate the dropdown with options
+                const endpointSelect = document.getElementById('endpointSelect');
+                Object.keys(endpoints).forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group;
+                    option.textContent = group;
+                    endpointSelect.appendChild(option);
                 });
 
-                // Bar chart configuration
-                const barConfig = {
-                    type: 'bar',
-                    data: {
-                        labels: Object.keys(endpoints),
-                        datasets: [{
-                            label: 'Latency (ms)',
-                            data: Array(Object.keys(endpoints).length).fill(0),
-                            backgroundColor: ['#ff4d4d', '#ffcc00', '#3399ff']
-                        }]
-                    },
-                    options: {
-                        indexAxis: 'y',
-                        scales: {
-                            x: {
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: 'Latency (ms)'
-                                }
-                            },
-                            y: {
-                                title: {
-                                    display: true,
-                                    text: 'Services'
-                                }
+                // Initialize latency data for the first group by default
+                selectEndpointGroup(endpointSelect.value);
+
+                // Add event listener to handle endpoint group selection
+                endpointSelect.addEventListener('change', (event) => {
+                    selectEndpointGroup(event.target.value);
+                });
+            })
+            .catch(error => console.error('Error loading endpoints:', error));
+
+        // Function to select endpoint group and initialize charts
+        function selectEndpointGroup(group) {
+            selectedEndpoints = endpoints[group];
+            latencyData = {};
+
+            // Initialize latency data for each endpoint in the selected group
+            Object.keys(selectedEndpoints).forEach(endpoint => {
+                latencyData[endpoint] = [];
+            });
+
+            // Update bar chart configuration
+            const barConfig = {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(selectedEndpoints),
+                    datasets: [{
+                        label: 'Latency (ms)',
+                        data: Array(Object.keys(selectedEndpoints).length).fill(0),
+                        backgroundColor: ['#ff4d4d', '#ffcc00', '#3399ff']
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Latency (ms)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Services'
                             }
                         }
                     }
-                };
+                }
+            };
 
-                // Line chart configuration
-                const lineConfig = {
-                    type: 'line',
-                    data: {
-                        labels: Array.from({ length: 30 }, (_, i) => `${i + 1}`),
-                        datasets: Object.keys(endpoints).map(endpoint => ({
-                            label: endpoint,
-                            data: Array(30).fill(0),
-                            borderColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 1)`,
-                            backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.2)`,
-                            fill: true,
-                            tension: 0.4
-                        }))
-                    },
-                    options: {
-                        scales: {
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: 'Time (last 30 measurements)'
-                                }
-                            },
-                            y: {
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: 'Latency (ms)'
-                                }
+            // Update line chart configuration
+            const lineConfig = {
+                type: 'line',
+                data: {
+                    labels: Array.from({ length: 30 }, (_, i) => `${i + 1}`),
+                    datasets: Object.keys(selectedEndpoints).map(endpoint => ({
+                        label: endpoint,
+                        data: Array(30).fill(0),
+                        borderColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 1)`,
+                        backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.2)`,
+                        fill: true,
+                        tension: 0.4
+                    }))
+                },
+                options: {
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time (last 30 measurements)'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Latency (ms)'
                             }
                         }
                     }
-                };
+                }
+            };
 
-                // Create charts
+            // Create or update charts
+            if (!barChart) {
                 const barChartCtx = document.getElementById('barChart').getContext('2d');
                 barChart = new Chart(barChartCtx, barConfig);
+            } else {
+                barChart.data = barConfig.data;
+                barChart.update();
+            }
 
+            if (!lineChart) {
                 const lineChartCtx = document.getElementById('latencyChart').getContext('2d');
                 lineChart = new Chart(lineChartCtx, lineConfig);
+            } else {
+                lineChart.data = lineConfig.data;
+                lineChart.update();
+            }
 
+            // 1. First time: Fake update with initial zeros to show charts immediately
                 measureAndUpdate();
                 // 3. Then measure and update with real data
                 setTimeout(() => {
@@ -177,8 +219,8 @@
                 setInterval(() => {
                     measureAndUpdate();
                 }, 10000);
-            })
-            .catch(error => console.error('Error loading endpoints:', error));
+
+        }
     </script>
 </body>
 </html>
