@@ -1,300 +1,272 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebSocket Latency Checker</title>
-  <style>
-    :root {
-      --bg-color: #f5f5f5;
-      --text-color: #333;
-      --tab-bg-color: #4caf50;
-      --table-header-bg: #4caf50;
-      --latency-green: #4caf50;
-      --latency-yellow: #d4a017; /* Darker yellow */
-      --latency-red: #ff0000;
-    }
-    .dark-mode {
-      --bg-color: #333;
-      --text-color: #f5f5f5;
-      --tab-bg-color: #555;
-      --table-header-bg: #555;
-      --latency-green: #66bb6a;
-      --latency-yellow: #ffca28;
-      --latency-red: #e57373;
-    }
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 20px;
-      background-color: var(--bg-color);
-      color: var(--text-color);
-      transition: background-color 0.3s, color 0.3s;
-    }
-    h1 {
-      color: var(--text-color);
-    }
-    .tab {
-      display: flex;
-      justify-content: center;
-      margin-top: 20px;
-    }
-    .tab button {
-      background-color: var(--tab-bg-color);
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      cursor: pointer;
-      margin-right: 10px;
-    }
-    .tab button.active {
-      background-color: var(--text-color);
-    }
-    .content {
-      display: none;
-      margin-top: 20px;
-    }
-    .content.active {
-      display: block;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 10px;
-      text-align: left;
-      cursor: pointer;
-    }
-    th {
-      background-color: var(--table-header-bg);
-      color: white;
-    }
-    tr:nth-child(even) {
-      background-color: #f2f2f2;
-    }
-    .latency {
-      color: var(--latency-green);
-    }
-    .error {
-      color: var(--latency-red);
-    }
-    .dark-mode tr:nth-child(even) {
-      background-color: #555;
-    }
-    .toggle-mode {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      font-size: 24px;
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: var(--text-color);
-      transition: color 0.3s;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Latency Comparison</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #eaeaea;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        #endpointSelect {
+            margin: 20px auto;
+            display: block;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 200px;
+            text-align: center;
+        }
+        .chart-container {
+            width: 100%;
+            max-width: 900px;
+            margin: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        canvas {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+    </style>
 </head>
 <body>
-  <h1>WebSocket Latency Checker</h1>
-  <button class="toggle-mode" onclick="toggleMode()" title="Toggle Dark Mode">&#9728;</button>
+    <h1>WebSocket Latency Checker</h1>
+    <div style="text-align: center;">
+        <label for="endpointSelect">Select Chain:</label>
+        <select id="endpointSelect">
+            <!-- Options will be populated dynamically -->
+        </select>
+    </div>
+    <div class="chart-container">
+        <div class="bar-chart">
+            <canvas id="barChart" width="900" height="400"></canvas>
+        </div>
+        <div class="line-chart">
+            <canvas id="latencyChart" width="900" height="400"></canvas>
+        </div>
+    </div>
 
-  <div id="tab-buttons" class="tab"></div>
-  <div id="network-contents"></div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let endpoints = {}; // Declare endpoints object
+        let selectedEndpoints = {}; // Store currently selected endpoints
+        let latencyData = {}; // Store latency data
+        let barChart, lineChart; // Declare chart variables
 
-  <script>
-    let activeNetwork = '';
-    let latencyCheckInterval;
+        // Function to measure WebSocket latency
+        function measureLatency(endpointName, endpointUrl) {
+            const ws = new WebSocket(endpointUrl);
+            const start = Date.now();
 
-    async function fetchEndpoints() {
-      const response = await fetch('endpoints.json');
-      return await response.json();
-    }
+            ws.onopen = () => {
+                const latency = Date.now() - start;
+                latencyData[endpointName].push(latency);
 
-    async function checkLatency(url, rowId) {
-      const start = performance.now();
-      try {
-        const socket = new WebSocket(url);
-        socket.onopen = () => {
-          const latency = (performance.now() - start).toFixed(2);
-          const latencyCell = document.getElementById(rowId).querySelector('.latency');
-          latencyCell.textContent = latency + ' ms';
-          latencyCell.classList.remove('error');
+                if (latencyData[endpointName].length > 30) {
+                    latencyData[endpointName].shift(); // Keep last 30 values
+                }
+                ws.close();
+            };
 
-          // Color-code latency
-          if (latency < 300) {
-            latencyCell.style.color = 'var(--latency-green)';
-          } else if (latency < 1000) {
-            latencyCell.style.color = 'var(--latency-yellow)';
-          } else {
-            latencyCell.style.color = 'var(--latency-red)';
-          }
-
-          socket.close();
-        };
-        socket.onerror = () => {
-          const latencyCell = document.getElementById(rowId).querySelector('.latency');
-          latencyCell.textContent = 'Failed to connect';
-          latencyCell.style.color = 'var(--latency-red)';
-          latencyCell.classList.add('error');
-        };
-      } catch (error) {
-        const latencyCell = document.getElementById(rowId).querySelector('.latency');
-        latencyCell.textContent = 'Error';
-        latencyCell.style.color = 'var(--latency-red)';
-        latencyCell.classList.add('error');
-      }
-    }
-
-    function createTabs(endpoints) {
-      const tabButtonsContainer = document.getElementById('tab-buttons');
-      tabButtonsContainer.innerHTML = '';
-
-      for (const network in endpoints) {
-        const button = document.createElement('button');
-        button.textContent = network.charAt(0).toUpperCase() + network.slice(1);
-        button.onclick = () => showNetwork(network);
-        tabButtonsContainer.appendChild(button);
-      }
-
-      if (tabButtonsContainer.firstChild) {
-        tabButtonsContainer.firstChild.classList.add('active');
-      }
-    }
-
-    function createTables(endpoints) {
-      const container = document.getElementById('network-contents');
-      container.innerHTML = '';
-
-      for (const network in endpoints) {
-        const networkDiv = document.createElement('div');
-        networkDiv.id = network;
-        networkDiv.classList.add('content');
-
-        const relaychains = endpoints[network].relaychains;
-        const relayTable = createTableHTML(network, 'Relaychain', relaychains);
-        networkDiv.innerHTML += `<h2>${network.charAt(0).toUpperCase() + network.slice(1)} Relaychains</h2>`;
-        networkDiv.appendChild(relayTable);
-
-        const parachains = endpoints[network].parachains;
-        for (const chain in parachains) {
-          const paraTable = createTableHTML(network, chain, parachains[chain]);
-          networkDiv.innerHTML += `<h2>${chain} Parachain</h2>`;
-          networkDiv.appendChild(paraTable);
+            ws.onerror = () => {
+                console.error(`Failed to connect to ${endpointName}`);
+            };
         }
 
-        container.appendChild(networkDiv);
-      }
+        // Function to update charts with new data
+        function updateCharts() {
+            barChart.data.labels = Object.keys(latencyData);
+            barChart.data.datasets[0].data = Object.values(latencyData).map(data => data.slice(-1)[0] || 0);
+            barChart.update();
 
-      if (container.firstChild) {
-        container.firstChild.classList.add('active');
-        activeNetwork = container.firstChild.id; // Set the active network
-        startLatencyChecks(activeNetwork); // Start latency checks for the first network
-      }
-    }
-
-    function createTableHTML(network, chain, data) {
-      const table = document.createElement('table');
-      const tableId = `${network}-${chain}-table`;
-      table.id = tableId;
-      table.innerHTML = `
-        <thead>
-          <tr>
-            <th onclick="sortTable('${tableId}', 0)">Provider</th>
-            <th onclick="sortTable('${tableId}', 1)">WebSocket URL</th>
-            <th onclick="sortTable('${tableId}', 2)">Latency</th>
-          </tr>
-        </thead>
-        <tbody id="${network}-${chain}-container"></tbody>
-      `;
-
-      const tableBody = table.querySelector('tbody');
-      for (const provider in data) {
-        const url = data[provider];
-        const rowId = `${network}-${chain}-${provider}`.replace(/\s+/g, '-');
-        const row = document.createElement('tr');
-        row.id = rowId;
-        row.innerHTML = `
-          <td>${provider}</td>
-          <td>${url}</td>
-          <td class="latency">Checking...</td>
-        `;
-        tableBody.appendChild(row);
-      }
-
-      return table;
-    }
-
-    function showNetwork(network) {
-      const contents = document.querySelectorAll('.content');
-      const tabs = document.querySelectorAll('.tab button');
-      contents.forEach(content => content.classList.remove('active'));
-      tabs.forEach(tab => tab.classList.remove('active'));
-      document.getElementById(network).classList.add('active');
-      event.currentTarget.classList.add('active');
-      activeNetwork = network; // Set the active network
-
-      // Stop previous latency checks and start new ones
-      clearInterval(latencyCheckInterval);
-      startLatencyChecks(activeNetwork);
-      latencyCheckInterval = setInterval(() => {
-        const rows = document.querySelectorAll(`#${activeNetwork} tbody tr`);
-        rows.forEach(row => {
-          const url = row.cells[1].textContent; // Get the URL from the second cell
-          const rowId = row.id;
-          checkLatency(url, rowId); // Check latency only for the active tab
-        });
-      }, 10000); // Check latency every 10 seconds
-    }
-
-    function sortTable(tableId, columnIndex) {
-      const table = document.getElementById(tableId);
-      const tbody = table.tBodies[0];
-      const rows = Array.from(tbody.rows);
-      const isNumericColumn = columnIndex === 2;
-
-      rows.sort((a, b) => {
-        const aText = a.cells[columnIndex].textContent.trim();
-        const bText = b.cells[columnIndex].textContent.trim();
-
-        if (isNumericColumn) {
-          const aLatency = parseFloat(aText);
-          const bLatency = parseFloat(bText);
-          return (isNaN(aLatency) || aLatency === 0 ? Infinity : aLatency) - (isNaN(bLatency) || bLatency === 0 ? Infinity : bLatency);
-        } else {
-          return aText.localeCompare(bText);
+            lineChart.data.datasets.forEach((dataset, index) => {
+                dataset.data = latencyData[Object.keys(latencyData)[index]];
+            });
+            lineChart.update();
         }
-      });
 
-      rows.forEach(row => tbody.appendChild(row));
-    }
+        // Function to measure and update charts
+        function measureAndUpdate() {
+            Object.entries(selectedEndpoints).forEach(([name, url]) => {
+                measureLatency(name, url);
+            });
+            updateCharts();
+        }
 
-    function startLatencyChecks(network) {
-      const rows = document.querySelectorAll(`#${network} tbody tr`);
-      rows.forEach(row => {
-        const url = row.cells[1].textContent; // Get the URL from the second cell
-        const rowId = row.id;
-        checkLatency(url, rowId); // Check latency only for the active tab
-      });
-    }
+        // Fetch endpoints from JSON and initialize charts
+        fetch('endpoints.json')
+            .then(response => response.json())
+            .then(data => {
+                endpoints = data.endpoints;
 
-    function toggleMode() {
-      document.body.classList.toggle('dark-mode');
-    }
+                // Populate the dropdown with options
+                const endpointSelect = document.getElementById('endpointSelect');
+                Object.keys(endpoints).forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group;
+                    option.textContent = group;
+                    endpointSelect.appendChild(option);
+                });
 
-    async function init() {
-      const endpoints = await fetchEndpoints();
-      createTabs(endpoints);
-      createTables(endpoints);
-      latencyCheckInterval = setInterval(async () => {
-        const updatedEndpoints = await fetchEndpoints();
-        createTables(updatedEndpoints);
-      }, 10000); // Refresh latency every 10 seconds
-    }
+                // Initialize latency data for the first group by default
+                selectEndpointGroup(endpointSelect.value);
 
-    init();
-  </script>
+                // Add event listener to handle endpoint group selection
+                endpointSelect.addEventListener('change', (event) => {
+                    selectEndpointGroup(event.target.value);
+                });
+            })
+            .catch(error => console.error('Error loading endpoints:', error));
+
+        // Function to select endpoint group and initialize charts
+        function selectEndpointGroup(group) {
+            selectedEndpoints = endpoints[group];
+            latencyData = {};
+
+            // Initialize latency data for each endpoint in the selected group
+            Object.keys(selectedEndpoints).forEach(endpoint => {
+                latencyData[endpoint] = [];
+            });
+
+            // Update bar chart configuration
+            const barConfig = {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(selectedEndpoints),
+                    datasets: [{
+                        label: 'Latency (ms)',
+                        data: Array(Object.keys(selectedEndpoints).length).fill(0),
+                        backgroundColor: ['#42A5F5', '#66BB6A', '#FFA726'], // Updated colors
+                        borderColor: ['#1E88E5', '#43A047', '#FB8C00'], // Updated border colors
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Latency (ms)',
+                                color: '#666'
+                            },
+                            grid: {
+                                color: '#ccc'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Services',
+                                color: '#666'
+                            },
+                            grid: {
+                                color: '#ccc'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#333'
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Update line chart configuration
+            const lineConfig = {
+                type: 'line',
+                data: {
+                    labels: Array.from({ length: 30 }, (_, i) => `${i + 1}`),
+                    datasets: Object.keys(selectedEndpoints).map(endpoint => ({
+                        label: endpoint,
+                        data: Array(30).fill(0),
+                        borderColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 1)`,
+                        backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.2)`,
+                        fill: true,
+                        tension: 0.4
+                    }))
+                },
+                options: {
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time (last 30 measurements)',
+                                color: '#666'
+                            },
+                            grid: {
+                                color: '#ccc'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Latency (ms)',
+                                color: '#666'
+                            },
+                            grid: {
+                                color: '#ccc'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#333'
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Create or update charts
+            if (!barChart) {
+                const barChartCtx = document.getElementById('barChart').getContext('2d');
+                barChart = new Chart(barChartCtx, barConfig);
+            } else {
+                barChart.data = barConfig.data;
+                barChart.update();
+            }
+
+            if (!lineChart) {
+                const lineChartCtx = document.getElementById('latencyChart').getContext('2d');
+                lineChart = new Chart(lineChartCtx, lineConfig);
+            } else {
+                lineChart.data = lineConfig.data;
+                lineChart.update();
+            }
+
+            // 1. First time: Fake update with initial zeros to show charts immediately
+                measureAndUpdate();
+                // 3. Then measure and update with real data
+                setTimeout(() => {
+                    measureAndUpdate();
+                }, 1000); // This ensures we measure after 2 seconds
+                setTimeout(() => {
+                    measureAndUpdate();
+                }, 4000); // This ensures we measure after 2 seconds
+                // 4. Continue updating every 10 seconds
+                setInterval(() => {
+                    measureAndUpdate();
+                }, 10000);
+        }
+    </script>
 </body>
 </html>
